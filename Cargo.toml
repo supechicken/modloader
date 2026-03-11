@@ -21,10 +21,6 @@ syscalls = { version = "0.8.1", default-features = false, features = [
     "x86_64",
 ] }
 
-# for kmsg logging
-log = "0.4"
-kernlog = { git = "https://github.com/kstep/kernlog.rs" }
-
 [profile.release]
 strip = true
 lto = true

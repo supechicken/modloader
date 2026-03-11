@@ -36,15 +36,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "kernlog"
-version = "0.3.1"
-source = "git+https://github.com/kstep/kernlog.rs#68caa7bf1e27baea35b00ebba786cafae0bca90f"
-dependencies = [
- "libc",
- "log",
-]
-
-[[package]]
 name = "libc"
 version = "0.2.178"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -68,8 +59,6 @@ version = "2.0.0"
 dependencies = [
  "anyhow",
  "goblin",
- "kernlog",
- "log",
  "rustix",
  "scroll",
  "syscalls",
