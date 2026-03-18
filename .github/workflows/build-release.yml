@@ -1,0 +1,102 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [ "**" ]
+    tags: [ "v*" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build - ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-musl
+            arch: x86_64
+            libc: musl
+          - target: aarch64-unknown-linux-musl
+            arch: aarch64
+            libc: musl
+          - target: x86_64-unknown-linux-gnu
+            arch: x86_64
+            libc: glibc
+          - target: aarch64-unknown-linux-gnu
+            arch: aarch64
+            libc: glibc
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Set Build Profile
+        id: profile
+        run: |
+          if [ "${{ github.ref }}" == "refs/heads/main" ] || [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            echo "profile=release" >> $GITHUB_OUTPUT
+            echo "flag=--release" >> $GITHUB_OUTPUT
+          else
+            echo "profile=debug" >> $GITHUB_OUTPUT
+            echo "flag=" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Build with Cross
+        uses: houseabsolute/actions-rust-cross@v0
+        with:
+          command: build
+          target: ${{ matrix.target }}
+          args: ${{ steps.profile.outputs.flag }}
+
+      - name: Prepare Artifacts
+        run: |
+          # The binary name from Cargo.toml is 'modloader'
+          BIN_NAME="modloader"
+          SRC_PATH="target/${{ matrix.target }}/${{ steps.profile.outputs.profile }}/$BIN_NAME"
+          
+          # Rename for distribution: modloader-<arch>-<libc>
+          DIST_NAME="modloader-${{ matrix.arch }}-${{ matrix.libc }}"
+          if [ "${{ steps.profile.outputs.profile }}" == "debug" ]; then
+            DIST_NAME="${DIST_NAME}-debug"
+          fi
+          
+          cp "$SRC_PATH" "$DIST_NAME"
+          echo "ARTIFACT_NAME=$DIST_NAME" >> $GITHUB_ENV
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          path: ${{ env.ARTIFACT_NAME }}
+
+  release:
+    name: Release
+    needs: build
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'latest' }}
+          name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'Latest Build' }}
+          prerelease: ${{ !startsWith(github.ref, 'refs/tags/') }}
+          generate_release_notes: true
+          # Make sure we overwrite the 'latest' release if it already exists
+          make_latest: ${{ github.ref == 'refs/heads/main' && 'true' || 'legacy' }}
