@@ -91,6 +91,37 @@ jobs:
     if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Generate Changelog
+        id: changelog
+        run: |
+          # Get current tag or branch name
+          CURRENT_REF="${{ github.ref_name }}"
+          
+          # Try to get the previous tag, fallback to the first commit if no tags exist
+          PREVIOUS_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          
+          if [ -z "$PREVIOUS_TAG" ]; then
+            # First release: use all commits
+            COMMIT_LIST=$(git log --pretty=format:"- [%h]: %s")
+            COMP_URL="https://github.com/${{ github.repository }}/commits/${CURRENT_REF}"
+          else
+            # Incremental release: commits since previous tag
+            COMMIT_LIST=$(git log --pretty=format:"- [%h]: %s" ${PREVIOUS_TAG}..HEAD)
+            COMP_URL="https://github.com/${{ github.repository }}/compare/${PREVIOUS_TAG}...${CURRENT_REF}"
+          fi
+          
+          # Build the final body
+          echo "body<<EOF" >> $GITHUB_OUTPUT
+          echo "$COMMIT_LIST" >> $GITHUB_OUTPUT
+          echo "" >> $GITHUB_OUTPUT
+          echo "**Full Changelog**: $COMP_URL" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
       - name: Download Artifacts
         uses: actions/download-artifact@v8
         with:
@@ -104,6 +135,7 @@ jobs:
           tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'latest' }}
           name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'Latest Build' }}
           prerelease: ${{ !startsWith(github.ref, 'refs/tags/') }}
-          generate_release_notes: true
+          body: ${{ steps.changelog.outputs.body }}
+          generate_release_notes: false
           # Make sure we overwrite the 'latest' release if it already exists
           make_latest: ${{ github.ref == 'refs/heads/main' && 'true' || 'legacy' }}
