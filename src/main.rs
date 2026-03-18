@@ -3,7 +3,7 @@
 mod loader;
 mod checker;
 
-use std::ffi::CStr;
+use std::ffi::{CStr, c_char};
 use rustix::process::getuid;
 use loader::ErrorCode;
 
@@ -25,9 +25,9 @@ const ERROR_MESSAGES: &[(&str, ErrorCode)] = &[
 /// https://github.com/rust-lang/rust/blob/3071aefdb2821439e2e6f592f41a4d28e40c1e79/library/std/src/sys/unix/mod.rs#L80
 /// So we use the C main function and call rust code from there
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn main(argc: i32, argv: *const *const u8, _envp: *const *const u8) -> i32 {
+pub unsafe extern "C" fn main(argc: i32, argv: *const *const c_char, _envp: *const *const c_char) -> i32 {
     // Program name
-    let _p_abs = unsafe { CStr::from_ptr(*(argv) as *const i8) }.to_str().unwrap();
+    let _p_abs = unsafe { CStr::from_ptr(*argv) }.to_str().unwrap();
     let _p = _p_abs.split('/').last().unwrap();
     const _E: &str = "ERROR";
 
@@ -46,7 +46,7 @@ pub unsafe extern "C" fn main(argc: i32, argv: *const *const u8, _envp: *const *
     }
 
     // Get the path argument
-    let path_cstr = unsafe { CStr::from_ptr(*(argv.add(1)) as *const i8) };
+    let path_cstr = unsafe { CStr::from_ptr(*(argv.add(1))) };
     let path_str = match path_cstr.to_str() {
         Ok(s) => s,
         Err(_) => {
